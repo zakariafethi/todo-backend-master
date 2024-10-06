@@ -1,0 +1,38 @@
+stages:
+  - test
+  - dockerize
+  - deploy
+
+before_script:
+  - docker login -u simpletech-runner -p $TODO_DEPLOY_TOKEN $CI_REGISTRY
+
+django_unit_tests:
+  stage: test
+  script:
+    - source /mnt/c/Users/ptipo/VirtualEnvs/todo-backend/bin/activate
+    - pip install -U -r requirements.txt
+    - python manage.py test --noinput
+    - deactivate
+  tags:
+    - simpletech-test
+
+generate_container:
+  stage: dockerize
+  script:
+    - docker pull $CI_REGISTRY_IMAGE:latest || true
+    - docker build --pull --cache-from $CI_REGISTRY_IMAGE:latest --tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA --tag $CI_REGISTRY_IMAGE:dev .
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+    - docker push $CI_REGISTRY_IMAGE:dev
+  tags:
+    - simpletech-test
+
+deploy_to_test:
+  stage: deploy
+  script:
+    - docker stop todo_backend || true
+    - docker update --restart=no todo_backend || true
+    - docker rm todo_backend_old || true
+    - docker rename todo_backend todo_backend_old || true
+    - docker run -d --name todo_backend --restart=always -p 8000:8000 $CI_REGISTRY_IMAGE:dev
+  tags:
+    - simpletech-test
